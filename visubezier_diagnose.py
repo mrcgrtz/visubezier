@@ -1,150 +1,164 @@
 """Diagnostic for minihtml image support.
 
-The popup, labels and hover detection all work, so when a preview shows as a
-blank gap the failure is in how minihtml decodes the image. This command puts
-a series of images in one popup, each varying a single property, so that a
-single glance identifies which property minihtml rejects.
+Round one showed every image blank -- including a 188-byte PNG and a file://
+reference -- while the <img> boxes were still laid out at their declared sizes.
+So minihtml parses the tag and reserves the box, then paints nothing, for every
+format and both URL schemes.
+
+That rules out the encoders as the sole cause, so this round leads with images
+this package did not produce: the upstream icon already in the repository, and
+the canonical 1x1 PNG data URI. It also varies the markup and the URL scheme,
+and renders the same set as a phantom, since phantoms and popups take different
+paths to the screen.
 
 Run it from the command palette: "VisuBezier: Diagnose Image Support".
 """
 
+import base64
 import os
+import struct
+import zlib
+from urllib.parse import quote
 
 import sublime
 import sublime_plugin
 
-from .core import gif
+from . import visubezier as plugin  # noqa: F401  (ensures the package imports)
 from .core import png
 from .core import raster
 from .core import render
 
+#: The canonical 1x1 PNG data URI. Not produced by this package.
+CANONICAL_1X1 = (
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQ'
+    'DwAEhQGAhKmMIQAAAABJRU5ErkJggg=='
+)
+
 PALETTE = raster.build_palette((45, 45, 48), (215, 215, 215))
 
 
-def _checker(width, height):
-    """A small high-contrast pattern, so a successful decode is unmistakable."""
-    pixels = bytearray(width * height)
-    for y in range(height):
-        for x in range(width):
-            pixels[y * width + x] = 31 if (x // 2 + y // 2) % 2 else 0
-    return pixels
+def _chunk(tag, payload):
+    return (struct.pack('>I', len(payload)) + tag + payload
+            + struct.pack('>I', zlib.crc32(tag + payload) & 0xFFFFFFFF))
 
 
-def _frame(pixels, width, height, delay=25):
-    return {'pixels': pixels, 'x': 0, 'y': 0,
-            'width': width, 'height': height, 'delay': delay}
+def _truecolor_png(size=16):
+    """A colour-type-2 PNG, to test whether palette PNGs specifically are refused."""
+    raw = bytearray()
+    for y in range(size):
+        raw.append(0)
+        for x in range(size):
+            raw += bytes((255, 0, 0) if (x // 2 + y // 2) % 2 else (0, 0, 255))
+    return (b'\x89PNG\r\n\x1a\n'
+            + _chunk(b'IHDR', struct.pack('>IIBBBBB', size, size, 8, 2, 0, 0, 0))
+            + _chunk(b'IDAT', zlib.compress(bytes(raw), 9))
+            + _chunk(b'IEND', b''))
 
 
-def _pad(image, target):
-    """Inflate a GIF to `target` bytes with a comment extension.
+def _indexed_png(size=16):
+    pixels = bytearray(31 if (x // 2 + y // 2) % 2 else 0
+                       for y in range(size) for x in range(size))
+    return png.encode(pixels, size, size, PALETTE)
 
-    Isolates payload size from every other property: the decoded image is
-    identical, only the byte count changes.
+
+def _file_url(path):
+    """A file:// URL with the path percent-encoded.
+
+    The packages and cache directories both contain a space ("Sublime Text"),
+    which an unescaped URL would truncate.
     """
-    if len(image) >= target:
-        return image
-    filler = b'x' * 255
-    comment = bytearray(b'\x21\xFE')
-    remaining = target - len(image)
-    while remaining > 0:
-        block = filler[:min(255, remaining)]
-        comment.append(len(block))
-        comment += block
-        remaining -= len(block) + 1
-    comment.append(0)
-    # Insert after the header block, before the first frame.
-    cut = image.index(b'\x21\xF9')
-    return image[:cut] + bytes(comment) + image[cut:]
+    return 'file://' + quote(path)
 
 
-def _variants():
-    """Build the test images, each isolating one property."""
-    small = _checker(16, 16)
-    wide = _checker(render.WIDTH, render.HEIGHT)
-
-    static_gif = gif.encode([_frame(wide, render.WIDTH, render.HEIGHT)],
-                            render.WIDTH, render.HEIGHT, PALETTE)
-
-    # Two full-canvas frames: animation without partial-frame rectangles.
-    shifted = bytearray(wide)
-    shifted[:len(shifted) // 2] = bytearray(len(shifted) // 2)
-    full_frame_animation = gif.encode(
-        [_frame(wide, render.WIDTH, render.HEIGHT),
-         _frame(shifted, render.WIDTH, render.HEIGHT)],
-        render.WIDTH, render.HEIGHT, PALETTE,
-    )
-
-    real_animated, _ = render.render('ease-in-out')
-    real_static, _ = render.render('ease-in-out', animate=False)
+def _rows():
+    """Build the test rows, strongest controls first."""
+    icon = os.path.join(sublime.packages_path(), 'VisuBezier', 'visubezier.png')
+    animated, _ = render.render('ease-in-out')
+    static, _ = render.render('ease-in-out', animate=False)
 
     return [
-        ('A  tiny PNG, 16x16',
-         png.encode(small, 16, 16, PALETTE), 'image/png', 16, 16),
-        ('B  full-size PNG, real preview',
-         real_static, 'image/png', render.WIDTH, render.HEIGHT),
-        ('C  tiny GIF, 16x16, single frame',
-         gif.encode([_frame(small, 16, 16)], 16, 16, PALETTE), 'image/gif', 16, 16),
-        ('D  full-size GIF, single frame',
-         static_gif, 'image/gif', render.WIDTH, render.HEIGHT),
-        ('E  same GIF padded to 40 KB',
-         _pad(static_gif, 40000), 'image/gif', render.WIDTH, render.HEIGHT),
-        ('F  animated GIF, 2 full-canvas frames',
-         full_frame_animation, 'image/gif', render.WIDTH, render.HEIGHT),
-        ('G  animated GIF, partial frames (what the plugin ships)',
-         real_animated, 'image/gif', render.WIDTH, render.HEIGHT),
+        ('I  upstream icon via res://  (not our encoder, not a data URL)',
+         'res://Packages/VisuBezier/visubezier.png', 128, 128),
+        ('J  upstream icon via file:// (percent-encoded)',
+         _file_url(icon), 128, 128),
+        ('K  canonical 1x1 PNG data URL, scaled  (not our encoder)',
+         'data:image/png;base64,' + CANONICAL_1X1, 64, 64),
+        ('L  truecolor PNG data URL  (colour type 2)',
+         render.data_uri(_truecolor_png(), 'image/png'), 64, 64),
+        ('M  indexed PNG data URL  (colour type 3)',
+         render.data_uri(_indexed_png(), 'image/png'), 64, 64),
+        ('N  full-size static preview PNG',
+         render.data_uri(static, 'image/png'), render.WIDTH, render.HEIGHT),
+        ('O  full-size animated preview GIF',
+         render.data_uri(animated, 'image/gif'), render.WIDTH, render.HEIGHT),
+    ]
+
+
+def _markup_variants(url):
+    """The same known image, marked up three different ways."""
+    return [
+        ('P  no width/height attributes', '<img src="%s">' % url),
+        ('Q  self-closing tag', '<img src="%s" />' % url),
+        ('R  sized with CSS instead of attributes',
+         '<img src="%s" style="width: 64px; height: 64px;">' % url),
     ]
 
 
 class VisuBezierDiagnoseCommand(sublime_plugin.TextCommand):
     def run(self, edit):
-        rows = []
-        report = []
+        report = ['', 'VisuBezier image diagnostic (round 2)', '']
+        blocks = []
 
-        for label, data, mime, width, height in _variants():
-            report.append('%-56s %7d bytes' % (label, len(data)))
-            rows.append(
-                '<div class="label">%s &mdash; %d bytes</div>'
+        for label, url, width, height in _rows():
+            report.append('%-62s %s' % (label, url[:72]))
+            blocks.append(
+                '<div class="label">%s</div>'
                 '<div class="cell"><img src="%s" width="%d" height="%d"></div>'
-                % (label, len(data), render.data_uri(data, mime), width, height)
+                % (label, url, width, height)
             )
 
-        # A file:// reference, to separate "cannot decode this image" from
-        # "cannot handle a data: URL this large".
-        try:
-            directory = os.path.join(sublime.cache_path(), 'VisuBezier')
-            os.makedirs(directory, exist_ok=True)
-            path = os.path.join(directory, 'diagnose.gif')
-            data, _ = render.render('ease-in-out')
-            with open(path, 'wb') as handle:
-                handle.write(data)
-            rows.append(
-                '<div class="label">H  same animated GIF via file:// </div>'
-                '<div class="cell"><img src="file://%s" width="%d" height="%d"></div>'
-                % (path, render.WIDTH, render.HEIGHT)
-            )
-            report.append('%-56s %s' % ('H  animated GIF via file://', path))
-        except Exception as error:
-            report.append('H  file:// variant failed to write: %s' % error)
+        control = 'res://Packages/VisuBezier/visubezier.png'
+        for label, markup in _markup_variants(control):
+            report.append('%-62s markup variant' % label)
+            blocks.append('<div class="label">%s</div><div class="cell">%s</div>'
+                          % (label, markup))
 
-        print('\nVisuBezier image diagnostic\n' + '\n'.join(report))
-        print('\nAny variant showing a blank gap in the popup is unsupported.')
-
-        self.view.show_popup(
-            """
+        body = """
             <body id="visubezier-diagnose">
                 <style>
                     body { margin: 0; padding: 0.5rem; }
                     .label { font-size: 0.9rem; color: var(--foreground); padding: 0.3rem 0 0.1rem 0; }
                     .cell { background-color: color(var(--foreground) alpha(0.12)); padding: 2px; }
-                    img { display: block; }
                 </style>
-                <p>Each row varies one property. A blank box means minihtml
-                rejected that image.</p>
+                <p>Rows I-K use images this package did not produce.</p>
                 %s
             </body>
-            """ % ''.join(rows),
-            sublime.HIDE_ON_MOUSE_MOVE_AWAY,
-            location=-1,
-            max_width=560,
-            max_height=900,
-        )
+        """ % ''.join(blocks)
+
+        print('\n'.join(report))
+        print('\nIf I, J and K are also blank, the popup is not rendering any '
+              'image at all and the encoders are not the cause.')
+
+        self.view.show_popup(body, sublime.HIDE_ON_MOUSE_MOVE_AWAY,
+                             location=-1, max_width=600, max_height=900)
+
+        # Phantoms reach the screen by a different path than popups; if images
+        # appear here but not above, the problem is specific to popups.
+        self.phantoms = sublime.PhantomSet(self.view, 'visubezier.diagnose')
+        self.phantoms.update([sublime.Phantom(
+            sublime.Region(self.view.sel()[0].begin()),
+            '<body><div>PHANTOM: icon via res://, then the preview GIF</div>'
+            '<div><img src="res://Packages/VisuBezier/visubezier.png" '
+            'width="64" height="64"></div><div><img src="%s" width="%d" '
+            'height="%d"></div></body>'
+            % (render.data_uri(render.render('ease-in-out')[0], 'image/gif'),
+               render.WIDTH, render.HEIGHT),
+            sublime.LAYOUT_BLOCK,
+        )])
+
+
+class VisuBezierDiagnoseClearCommand(sublime_plugin.TextCommand):
+    """Removes the diagnostic phantom."""
+
+    def run(self, edit):
+        sublime.PhantomSet(self.view, 'visubezier.diagnose').update([])
