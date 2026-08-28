@@ -102,6 +102,15 @@ class HoverTest(PluginTestCase):
         self.hover(0)
         self.assertIn('width="480" height="100"', self.view.popups[-1]['content'])
 
+    def test_never_gives_the_image_display_block(self):
+        # minihtml sizes the box from the width/height attributes but paints
+        # nothing when an img is display: block, which shows up as a preview
+        # that is silently blank rather than as a broken-image icon.
+        self.hover(0)
+        html = self.view.popups[-1]['content']
+        self.assertNotIn('display: block', html)
+        self.assertNotIn('display:block', html)
+
     def test_ignores_hovers_outside_the_text_area(self):
         self.listener.on_hover(self.view, self.regions()[0].begin(), sublime.HOVER_GUTTER)
         stub.drain()

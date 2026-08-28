@@ -6,13 +6,5 @@
 			"base_file": "${packages}/VisuBezier/VisuBezier.sublime-settings",
 			"default": "{\n\t$0\n}\n"
 		}
-	},
-	{
-		"caption": "VisuBezier: Diagnose Image Support",
-		"command": "visu_bezier_diagnose"
-	},
-	{
-		"caption": "VisuBezier: Clear Diagnostic Phantom",
-		"command": "visu_bezier_diagnose_clear"
 	}
 ]

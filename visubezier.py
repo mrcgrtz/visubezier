@@ -174,10 +174,9 @@ def _popup_html(expression, reference, uri):
                     padding: 0.1rem 0;
                 }
                 .easing { color: var(--foreground); }
-                img { display: block; }
             </style>
             <div class="label">%s</div>
-            <img src="%s" width="%d" height="%d">
+            <div class="preview"><img src="%s" width="%d" height="%d"></div>
             <div class="label easing">%s</div>
         </body>
     """ % (_escape(reference), uri, render.WIDTH, render.HEIGHT, _escape(expression))
