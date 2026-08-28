@@ -6,6 +6,8 @@ Rendering happens off the UI thread and is cached, because composing the GIF
 takes a couple of hundred milliseconds.
 """
 
+import traceback
+
 import sublime
 import sublime_plugin
 
@@ -41,6 +43,7 @@ DEFAULTS = {
         'text.xml',
     ],
     'max_file_size': 1048576,
+    'debug': False,
 }
 
 _settings = None
@@ -69,6 +72,19 @@ def plugin_unloaded():
     for window in sublime.windows():
         for view in window.views():
             view.erase_regions(REGION_KEY)
+
+
+def _log(message):
+    """Print to the console when debugging is switched on."""
+    if _setting('debug'):
+        print('VisuBezier: ' + message)
+
+
+def _report(message):
+    """Surface a failure rather than letting it vanish in a worker thread."""
+    print('VisuBezier: ' + message)
+    traceback.print_exc()
+    sublime.status_message('VisuBezier: ' + message + ' (see console)')
 
 
 def _setting(name):
@@ -217,9 +233,17 @@ def _advance(view, token, expression, reference, preview, index):
     def step():
         # Stop as soon as the popup is gone or another hover has taken over,
         # so a dismissed preview leaves no timer running.
-        if token != _hover_token or not view.is_valid() or not view.is_popup_visible():
+        if token != _hover_token or not view.is_valid():
+            _log('animation stopped: superseded or view gone')
             return
-        view.update_popup(_popup_html(expression, reference, frames[index]))
+        if not view.is_popup_visible():
+            _log('animation stopped at frame %d: popup no longer visible' % index)
+            return
+        try:
+            view.update_popup(_popup_html(expression, reference, frames[index]))
+        except Exception:
+            _report('could not update the popup')
+            return
         _advance(view, token, expression, reference, preview, (index + 1) % len(frames))
 
     sublime.set_timeout(step, preview['delay_ms'])
@@ -287,28 +311,39 @@ class VisuBezierListener(sublime_plugin.EventListener):
             return
 
         def work():
-            result = render.build(
-                expression,
-                reference=reference,
-                background=str(_setting('background')),
-                foreground=str(_setting('foreground')),
-                duration=str(_setting('duration')),
-                animate=bool(_setting('animate')),
-            )
+            try:
+                result = render.build(
+                    expression,
+                    reference=reference,
+                    background=str(_setting('background')),
+                    foreground=str(_setting('foreground')),
+                    duration=str(_setting('duration')),
+                    animate=bool(_setting('animate')),
+                )
+            except Exception:
+                _report('failed to render a preview for %r' % expression)
+                return
             if result is None:
+                _log('no preview: %r did not parse' % expression)
                 return
             preview = {
                 'uris': [render.data_uri(frame, result['mime'])
                          for frame in result['frames']],
                 'delay_ms': result['delay_ms'],
             }
+            _log('rendered %r: %d frame(s), %d ms apart'
+                 % (expression, len(preview['uris']), preview['delay_ms']))
             _cache_put(key, preview)
 
             def present():
                 # A newer hover has taken over, or the view went away.
                 if token != _hover_token or not view.is_valid():
+                    _log('discarding a superseded preview for %r' % expression)
                     return
-                _show(view, point, expression, reference, preview, token)
+                try:
+                    _show(view, point, expression, reference, preview, token)
+                except Exception:
+                    _report('failed to show the preview for %r' % expression)
 
             sublime.set_timeout(present, 0)
 

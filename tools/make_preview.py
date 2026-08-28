@@ -12,9 +12,6 @@ import os
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, ROOT)
-
-from core import render  # noqa: E402
 
 #: A bounce, which exercises overshoot and settling in one image.
 EXPRESSION = (
@@ -23,6 +20,11 @@ EXPRESSION = (
 )
 
 if __name__ == '__main__':
+    # Only touch sys.path when run as a script, so that importing this module
+    # can never shadow the package's own modules inside Sublime.
+    sys.path.insert(0, ROOT)
+    from core import render
+
     data = render.render_gif(EXPRESSION, duration='1.4s')
     target = os.path.join(ROOT, 'preview.gif')
     with open(target, 'wb') as handle:

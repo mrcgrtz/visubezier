@@ -38,5 +38,9 @@
 	],
 
 	// Skip scanning buffers larger than this many bytes.
-	"max_file_size": 1048576
+	"max_file_size": 1048576,
+
+	// Log what the plugin is doing to the console (View > Show Console).
+	// Failures are always reported there; this adds the successful steps.
+	"debug": false
 }
