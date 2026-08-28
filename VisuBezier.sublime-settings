@@ -1,0 +1,40 @@
+{
+	// Easing function the preview animates alongside yours, for comparison.
+	// Any easing VisuBezier can parse: a keyword, cubic-bezier(), steps() or linear().
+	"reference_easing_function": "linear",
+
+	// Duration of one pass of the preview animation, as a CSS time.
+	"duration": "1s",
+
+	// Background colour of the preview image.
+	"background": "#2d2d30",
+
+	// Foreground colour of the curve, grid and animated squares.
+	"foreground": "#d7d7d7",
+
+	// Animate the preview. Set to false for a static image that strobes the
+	// motion instead, which renders faster and uses far less memory.
+	"animate": true,
+
+	// Underline easing functions in the buffer to show they can be hovered.
+	"underline": true,
+
+	// Colour scheme scope used for that underline. The region.* scopes are
+	// provided by every Sublime Text colour scheme.
+	"underline_scope": "region.bluish",
+
+	// Scopes in which easing previews are active. Matching is by prefix, so
+	// "source.css" also covers CSS embedded in HTML, and "text.xml" covers SVG.
+	"selectors": [
+		"source.css",
+		"source.scss",
+		"source.sass",
+		"source.less",
+		"source.stylus",
+		"source.postcss",
+		"text.xml"
+	],
+
+	// Skip scanning buffers larger than this many bytes.
+	"max_file_size": 1048576
+}

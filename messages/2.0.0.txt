@@ -1,0 +1,22 @@
+VisuBezier 2.0.0
+================
+
+First release of the Sublime Text package, ported from the VS Code extension
+of the same name by Chris Kirk-Nielsen.
+
+Settings are new, and use Sublime naming. The mapping from the VS Code
+extension is:
+
+    visubezier.defaulteasingfunction  ->  reference_easing_function
+    visubezier.defaultduration        ->  duration
+    visubezier.defaultbackground      ->  background
+    visubezier.defaultcolor           ->  foreground
+    visubezier.defaultlanguages       ->  selectors  (scope selectors, not
+                                                      language identifiers)
+
+New in this port:
+
+  * linear() easings now animate correctly. The VS Code extension could only
+    draw them, because its renderer had no linear() support.
+  * Easings that overshoot no longer escape the preview area.
+  * "animate": false renders a static strobe of the motion instead of a GIF.

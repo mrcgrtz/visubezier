@@ -1,0 +1,43 @@
+[
+	{
+		"caption": "Preferences",
+		"mnemonic": "n",
+		"id": "preferences",
+		"children": [
+			{
+				"caption": "Package Settings",
+				"mnemonic": "P",
+				"id": "package-settings",
+				"children": [
+					{
+						"caption": "VisuBezier",
+						"children": [
+							{
+								"caption": "Settings",
+								"command": "edit_settings",
+								"args": {
+									"base_file": "${packages}/VisuBezier/VisuBezier.sublime-settings",
+									"default": "{\n\t$0\n}\n"
+								}
+							},
+							{
+								"caption": "README",
+								"command": "open_file",
+								"args": {
+									"file": "${packages}/VisuBezier/README.md"
+								}
+							},
+							{
+								"caption": "Changelog",
+								"command": "open_file",
+								"args": {
+									"file": "${packages}/VisuBezier/CHANGELOG.md"
+								}
+							}
+						]
+					}
+				]
+			}
+		]
+	}
+]

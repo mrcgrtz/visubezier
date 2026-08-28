@@ -1,26 +1,66 @@
 # VisuBezier
 
-Provides a preview when hovering CSS easing functions in [VS Code](https://github.com/Microsoft/vscode).
+Provides a preview when hovering CSS easing functions in [Sublime Text](https://www.sublimetext.com).
+
+A Sublime Text port of the [VisuBezier VS Code extension](https://github.com/chriskirknielsen/visubezier) by Chris Kirk-Nielsen.
 
 ## Features
 
-Hover over any CSS easing function to get a preview of the animation, comparing it to a `linear` easing (default).
+Easing functions are underlined in the buffer. Hover one to see a plot of the curve alongside an animation comparing it against a reference easing (`linear` by default).
 
-![Hover to preview](https://raw.githubusercontent.com/chriskirknielsen/visubezier/master/preview.gif)
+![Hover to preview](https://raw.githubusercontent.com/mrcgrtz/visubezier/master/preview.gif)
 
-## Extension Settings
+Supported easings:
 
-This extension has a few settings:
+-   Keywords — `linear`, `ease`, `ease-in`, `ease-out`, `ease-in-out`, `step-start`, `step-end`
+-   `cubic-bezier()`, including curves that overshoot
+-   `steps()` with every jumpterm — `start`, `end`, `jump-start`, `jump-end`, `jump-both`, `jump-none`
+-   `linear()`, with explicit, implicit and doubled stop positions
 
--   `visubezier.defaulteasingfunction`: Override the default comparison easing function with any valid easing function expressed as a keyword or a `cubic-bezier()` function (default: `linear`).
--   `visubezier.defaultduration`: Override the duration of the animation with any valid duration expressed as `0.5s` or `500ms` (default: `1s`).
--   `visubezier.defaultbackground`: Override the background color for the preview area (default: `#2d2d30`).
--   `visubezier.defaultcolor`: Override the foreground color for the preview elements (default: `#d7d7d7`).
--   `visubezier.defaultlanguages`: Override the list of languages for which you want to activate the preview. (default: `["css","sass","scss","less","postcss","stylus","xml","svg"]`).
+## Installation
 
-## Post-Install Sample
+### Package Control
 
-Paste this sample into VS Code after installing to see it in action:
+Open the command palette, run `Package Control: Install Package`, and pick **VisuBezier**.
+
+### Manually
+
+Clone into your `Packages` directory:
+
+```sh
+cd "$(python3 -c 'import sublime; print(sublime.packages_path())' 2>/dev/null || echo ~/Library/Application\ Support/Sublime\ Text/Packages)"
+git clone https://github.com/mrcgrtz/visubezier.git VisuBezier
+```
+
+The directory must be named `VisuBezier` for the menu entries to resolve.
+
+## Settings
+
+Open them from **Preferences → Package Settings → VisuBezier → Settings**.
+
+| Setting | Default | Description |
+| --- | --- | --- |
+| `reference_easing_function` | `"linear"` | Easing animated alongside yours for comparison. Any easing VisuBezier can parse. |
+| `duration` | `"1s"` | Duration of one pass of the animation, as a CSS time. |
+| `background` | `"#2d2d30"` | Background colour of the preview image. |
+| `foreground` | `"#d7d7d7"` | Colour of the curve, grid and animated squares. |
+| `animate` | `true` | When `false`, render a static strobe of the motion instead of a GIF. |
+| `underline` | `true` | Underline easing functions in the buffer. |
+| `underline_scope` | `"region.bluish"` | Colour scheme scope used for that underline. |
+| `selectors` | see below | Scopes in which previews are active. |
+| `max_file_size` | `1048576` | Skip scanning buffers larger than this many bytes. |
+
+`selectors` defaults to:
+
+```json
+["source.css", "source.scss", "source.sass", "source.less", "source.stylus", "source.postcss", "text.xml"]
+```
+
+Matching is by scope prefix, so `source.css` also covers CSS embedded in HTML and `text.xml` covers SVG.
+
+## Post-install sample
+
+Paste this into a CSS file and hover the values:
 
 ```css
 button {
@@ -42,73 +82,42 @@ button {
 }
 ```
 
-## Known Issues
+## How it works
 
--   Easing functions (e.g. `cubic-bezier(...)` and `linear(...)`) containing any values other than numbers are currently ignored (e.g. `calc()` or `var()`).
--   Points with negative values can cause the animation to fall out of the preview area.
--   `linear()` easing function animation preview falls back to rendering as a classic `ease` easing due to VS Code's internal rendering engine not handling the function notation (as of 2023-09-02).
+Sublime Text's popup renderer, [minihtml](https://www.sublimetext.com/docs/minihtml.html), supports neither SVG nor CSS animation, which is how the VS Code extension drew its preview. So VisuBezier rasterises the preview itself:
 
-## Release Notes
+-   `core/easing.py` parses and **evaluates** each easing — a Newton-Raphson solver for `cubic-bezier()`, jumpterm arithmetic for `steps()`, piecewise interpolation for `linear()`.
+-   `core/raster.py` draws into an indexed-colour canvas whose palette is a single foreground-over-background ramp, giving anti-aliasing for free.
+-   `core/png.py` and `core/gif.py` encode that canvas, the latter as a looping animation whose frames carry only the region that changed.
 
-### 1.6.1
+All of it is pure Python with no third-party dependencies.
 
--   Fixed parsing of `linear()` with negative values, and rendering of `linear()` with a value greater than `1` which was previously clamped to `1`.
+## Differences from the VS Code extension
 
-### 1.6.0
+-   **`linear()` animates.** VS Code's renderer had no `linear()` support, so the extension could draw the graph but fell back to `ease` for the animation. Evaluating the easing directly removes that limitation.
+-   **Overshoot stays in frame.** Squares are clamped to the animation track rather than escaping the preview area.
+-   **Adjacent easings are both found.** The upstream pattern consumed the delimiter after a match, so the second of `ease,ease` was missed.
+-   **`linear()` stop positions follow the spec.** They are forced to be non-decreasing, and a final stop keeps its own value rather than being snapped to `1`.
+-   **Settings use Sublime naming and scope selectors** instead of VS Code language identifiers. See the changelog for the mapping.
+-   **No inline icon.** minihtml cannot place an image inside a line of text, so matches are marked with an underline only.
 
--   Added support for [`linear()` syntax](https://jakearchibald.github.io/csswg-drafts/css-easing-2/Overview.html#the-linear-easing-function). Animation preview is not yet implemented in VS Code, but the SVG graph is correctly depicted (based on my interpretation of the spec, which I hope to be correct).
--   Added a licence file.
--   Updated the underlying VS Code Extension required files to run with more modern code (Node 18, TypeScript 5, VS Code 1.76+, and other things I hardly understand).
--   Updated the extension's package to patch vulnerabilities.
+## Known issues
 
-### 1.5.0
+-   Easing functions containing anything other than numbers are ignored, including `calc()` and `var()`.
+-   Rendering an animated preview takes a couple of hundred milliseconds the first time; results are cached per easing and settings combination. Set `"animate": false` if you would rather have instant static previews.
 
--   Added a `defaultlanguages` configuration option to only run the extension in relevant languages, overridable by the user if needed. (thanks to [@robole](https://github.com/robole) for the suggestion and to [tjx666](https://github.com/tjx666) for the example file!).
--   Patched a few package vulnerabilities.
+## Tests
 
-### 1.4.0
+```sh
+python3 tests/run.py
+```
 
--   Added support for `steps()` and `step-start`/`step-end` syntax.
--   Changed solid underline to a dotted underline.
--   Updated comments/typings.
+The suite runs outside Sublime Text against a stubbed API. Encoded images are verified against [ImageMagick](https://imagemagick.org) when it is installed, and those tests skip when it is not.
 
-### 1.3.5
+## Credits
 
--   Patch the security vulnerabilities for `url-parse`.
+Original VS Code extension by [Chris Kirk-Nielsen](https://github.com/chriskirknielsen). Sublime Text port by [Marc Görtz](https://marcgoertz.de/).
 
-### 1.3.4
+## License
 
--   Added an icon before the timing functions that can be previewed. Updated the ignored files.
-
-### 1.3.2
-
--   Fixed the `ease` mapping and allow to detect more than one function per declaration.
-
-### 1.3.1
-
--   Patch the security vulnerabilities for `minimist`.
-
-### 1.3.0
-
--   Fixed some greed in the detection regular expression.
-
-### 1.2.0
-
--   Updated icon and extension name
--   Patch the security vulnerabilities for `braces`, `js-yaml` and `fstream`.
-
-### 1.1.2
-
--   Patch the security vulnerabilities for `tar` and `node.extend`.
-
-### 1.1.1
-
--   Change the detection RegExp to be less greedy and not output false positives.
-
-### 1.1.0
-
--   Add a preview of the Bézier curve next to the animation.
-
-### 1.0.0
-
--   Initial release of VisuBezier. 🤘
+[MIT](LICENSE.md)

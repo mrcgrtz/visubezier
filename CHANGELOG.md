@@ -2,6 +2,49 @@
 
 All notable changes to VisuBezier will be documented in this file.
 
+## 2.0.0 - 2026-08-28
+
+First release of the Sublime Text package, ported from the VS Code extension.
+Everything below 2.0.0 describes the VS Code extension this was forked from.
+
+### Added
+
+-   Numeric evaluation of every supported easing, so `linear()` now animates
+    correctly. The VS Code extension could only draw it, because its renderer
+    had no `linear()` support.
+-   Pure-Python PNG and animated-GIF encoders and a small anti-aliased
+    rasteriser, since minihtml renders neither SVG nor CSS animation.
+-   An `animate` setting. When `false`, the preview is a static strobe of the
+    motion rather than a GIF: faster to render and far smaller.
+-   A test suite runnable outside Sublime Text with `python3 tests/run.py`.
+
+### Changed
+
+-   Settings are renamed to Sublime conventions, and languages become scope
+    selectors:
+
+    | VS Code | Sublime Text |
+    | --- | --- |
+    | `visubezier.defaulteasingfunction` | `reference_easing_function` |
+    | `visubezier.defaultduration` | `duration` |
+    | `visubezier.defaultbackground` | `background` |
+    | `visubezier.defaultcolor` | `foreground` |
+    | `visubezier.defaultlanguages` | `selectors` |
+
+-   `linear()` stop positions are forced to be non-decreasing, per the CSS
+    Easing Level 2 spec, and a trailing stop keeps its own value rather than
+    being snapped to `1`.
+-   Matches are marked with an underline rather than an inline icon, which
+    minihtml cannot place inside a line of text.
+
+### Fixed
+
+-   Easings that overshoot no longer escape the preview area.
+-   Adjacent easings are both detected. The upstream pattern consumed the
+    delimiter following a match, so the second of `ease,ease` was missed.
+-   The `cubic-bezier()` and `linear()` patterns no longer match empty
+    arguments such as `cubic-bezier(,,,)`.
+
 ### 1.6.1 - 2023-09-02
 
 -   Fixed parsing of `linear()` with negative values, and rendering of `linear()` with a value greater than `1` which was previously clamped to `1`.
