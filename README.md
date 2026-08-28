@@ -17,6 +17,10 @@ Supported easings:
 -   `steps()` with every jumpterm — `start`, `end`, `jump-start`, `jump-end`, `jump-both`, `jump-none`
 -   `linear()`, with explicit, implicit and doubled stop positions
 
+## Requirements
+
+Sublime Text 4. The package uses the 3.8 plugin host, declared in `.python-version`.
+
 ## Installation
 
 ### Package Control
@@ -32,7 +36,9 @@ cd "$(python3 -c 'import sublime; print(sublime.packages_path())' 2>/dev/null ||
 git clone https://github.com/mrcgrtz/visubezier.git VisuBezier
 ```
 
-The directory must be named `VisuBezier` for the menu entries to resolve.
+The directory must be named `VisuBezier` — note the capitalisation. The menu and command palette entries reference `${packages}/VisuBezier/`, so a clone named `visubezier` loads and previews fine but has no Settings entry under **Preferences → Package Settings**.
+
+Changes to files under `core/` are picked up on the next reload of `visubezier.py`; if a pull ever seems to have no effect, restarting Sublime Text is the reliable reset.
 
 ## Settings
 

@@ -22,7 +22,7 @@
 	"underline": true,
 
 	// Colour scheme scope used for that underline. The region.* scopes are
-	// provided by every Sublime Text colour scheme.
+	// provided by every Sublime Text 4 colour scheme.
 	"underline_scope": "region.bluish",
 
 	// Scopes in which easing previews are active. Matching is by prefix, so

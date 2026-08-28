@@ -6,13 +6,22 @@ Rendering happens off the UI thread and is cached, because composing the GIF
 takes a couple of hundred milliseconds.
 """
 
+import sys
 import traceback
 
 import sublime
 import sublime_plugin
 
-from .core import detect
-from .core import render
+# Sublime reloads a package's top-level plugin files when they change, but not
+# modules inside subdirectories -- those stay cached from the previous import.
+# Dropping them here means an updated core/ is picked up along with this file,
+# rather than silently running against the previous version until a restart.
+_CORE = __package__ + '.core'
+for _stale in [n for n in list(sys.modules) if n == _CORE or n.startswith(_CORE + '.')]:
+    del sys.modules[_stale]
+
+from .core import detect  # noqa: E402
+from .core import render  # noqa: E402
 
 SETTINGS_FILE = 'VisuBezier.sublime-settings'
 SETTINGS_KEY = 'visubezier'

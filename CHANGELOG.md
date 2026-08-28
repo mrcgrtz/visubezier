@@ -44,6 +44,9 @@ Everything below 2.0.0 describes the VS Code extension this was forked from.
 
 ### Fixed
 
+-   Submodules under `core/` are reloaded along with the top-level plugin.
+    Sublime caches modules in subdirectories, so an updated `core/` would
+    otherwise keep running the previously imported copy until a restart.
 -   Easings that overshoot no longer escape the preview area.
 -   Adjacent easings are both detected. The upstream pattern consumed the
     delimiter following a match, so the second of `ease,ease` was missed.
