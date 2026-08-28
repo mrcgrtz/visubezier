@@ -37,10 +37,14 @@ def set_timeout_async(fn, delay=0): deferred.append(fn)
 def windows(): return [_WINDOW]
 
 
-def drain():
-    """Run every queued callback, including ones they queue in turn."""
+def drain(limit=500):
+    """Run queued callbacks, including ones they queue in turn.
+
+    Bounded, because the animation loop reschedules itself for as long as the
+    popup stays visible.
+    """
     runs = 0
-    while deferred and runs < 500:
+    while deferred and runs < limit:
         deferred.pop(0)(); runs += 1
     return runs
 
@@ -55,6 +59,8 @@ class View:
         self.region_flags = {}
         self.region_scopes = {}
         self.popups = []
+        self.updates = []
+        self.popup_visible = False
         self._id = View._next_id[0]; View._next_id[0] += 1
 
     def id(self): return self._id
@@ -73,8 +79,15 @@ class View:
     def find_by_selector(self, selector):
         return [Region(0, len(self.text))] if self.match_selector(0, selector) else []
     def show_popup(self, content, flags=0, location=-1, max_width=320, max_height=240):
+        self.popup_visible = True
         self.popups.append({'content': content, 'location': location,
                             'max_width': max_width, 'max_height': max_height})
+    def update_popup(self, content):
+        self.updates.append(content)
+    def is_popup_visible(self):
+        return self.popup_visible
+    def hide_popup(self):
+        self.popup_visible = False
 
 
 class _Window:

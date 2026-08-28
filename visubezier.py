@@ -19,8 +19,9 @@ REGION_KEY = 'visubezier.easings'
 #: Milliseconds to wait after an edit before rescanning the buffer.
 RESCAN_DELAY = 500
 
-#: Cap on rendered previews held in memory. Each is on the order of 25 KB.
-CACHE_LIMIT = 64
+#: Cap on rendered previews held in memory. An animated preview is a list of
+#: stills, on the order of 60 KB once base64-encoded.
+CACHE_LIMIT = 24
 
 DEFAULTS = {
     'reference_easing_function': 'linear',
@@ -47,7 +48,8 @@ _cache = {}
 _cache_order = []
 
 #: Incremented on every hover so that a slow render belonging to an earlier
-#: hover cannot pop up over a later one.
+#: hover cannot pop up over a later one, and so that the animation loop of a
+#: dismissed popup stops driving updates.
 _hover_token = 0
 
 #: Per-view edit counter, used to drop stale debounced rescans.
@@ -190,14 +192,37 @@ def _escape(text):
             .replace('>', '&gt;'))
 
 
-def _show(view, point, expression, reference, uri):
+def _show(view, point, expression, reference, preview, token):
+    """Open the popup, and drive the animation if there is more than one frame.
+
+    minihtml paints only the first frame of an animated GIF, so the animation
+    is played by swapping the image with `update_popup` on a timer instead.
+    """
+    frames = preview['uris']
     view.show_popup(
-        _popup_html(expression, reference, uri),
+        _popup_html(expression, reference, frames[0]),
         sublime.HIDE_ON_MOUSE_MOVE_AWAY,
         location=point,
         max_width=560,
         max_height=260,
     )
+    if len(frames) > 1:
+        _advance(view, token, expression, reference, preview, 1)
+
+
+def _advance(view, token, expression, reference, preview, index):
+    """Schedule the next animation frame."""
+    frames = preview['uris']
+
+    def step():
+        # Stop as soon as the popup is gone or another hover has taken over,
+        # so a dismissed preview leaves no timer running.
+        if token != _hover_token or not view.is_valid() or not view.is_popup_visible():
+            return
+        view.update_popup(_popup_html(expression, reference, frames[index]))
+        _advance(view, token, expression, reference, preview, (index + 1) % len(frames))
+
+    sublime.set_timeout(step, preview['delay_ms'])
 
 
 class VisuBezierListener(sublime_plugin.EventListener):
@@ -253,16 +278,16 @@ class VisuBezierListener(sublime_plugin.EventListener):
             bool(_setting('animate')),
         )
 
-        cached = _cache_get(key)
-        if cached is not None:
-            _show(view, point, expression, reference, cached)
-            return
-
         _hover_token += 1
         token = _hover_token
 
+        cached = _cache_get(key)
+        if cached is not None:
+            _show(view, point, expression, reference, cached, token)
+            return
+
         def work():
-            result = render.render(
+            result = render.build(
                 expression,
                 reference=reference,
                 background=str(_setting('background')),
@@ -272,14 +297,18 @@ class VisuBezierListener(sublime_plugin.EventListener):
             )
             if result is None:
                 return
-            uri = render.data_uri(*result)
-            _cache_put(key, uri)
+            preview = {
+                'uris': [render.data_uri(frame, result['mime'])
+                         for frame in result['frames']],
+                'delay_ms': result['delay_ms'],
+            }
+            _cache_put(key, preview)
 
             def present():
                 # A newer hover has taken over, or the view went away.
                 if token != _hover_token or not view.is_valid():
                     return
-                _show(view, point, expression, reference, uri)
+                _show(view, point, expression, reference, preview, token)
 
             sublime.set_timeout(present, 0)
 
