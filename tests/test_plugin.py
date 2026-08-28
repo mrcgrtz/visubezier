@@ -51,10 +51,11 @@ class PluginTestCase(unittest.TestCase):
     def texts(self):
         return [self.view.substr(region) for region in self.regions()]
 
-    def hover(self, index, offset=1):
+    def hover(self, index, offset=1, limit=3):
         point = self.regions()[index].begin() + offset
         self.listener.on_hover(self.view, point, sublime.HOVER_TEXT)
-        stub.drain()
+        # Bounded: the animation loop reschedules itself while the popup lives.
+        stub.drain(limit)
         return point
 
 
@@ -90,17 +91,26 @@ class ScanTest(PluginTestCase):
 
 
 class HoverTest(PluginTestCase):
-    def test_shows_a_popup_with_an_animated_preview(self):
+    def test_shows_a_popup_with_a_preview(self):
         self.hover(1)
         self.assertEqual(len(self.view.popups), 1)
         html = self.view.popups[-1]['content']
-        self.assertIn('data:image/gif;base64,', html)
+        self.assertIn('data:image/png;base64,', html)
         self.assertIn('cubic-bezier(0.4, -0.2, 0.42, 1.2)', html)
         self.assertIn('>linear<', html)
 
     def test_pins_the_image_to_the_rendered_size(self):
         self.hover(0)
         self.assertIn('width="480" height="100"', self.view.popups[-1]['content'])
+
+    def test_never_gives_the_image_display_block(self):
+        # minihtml sizes the box from the width/height attributes but paints
+        # nothing when an img is display: block, which shows up as a preview
+        # that is silently blank rather than as a broken-image icon.
+        self.hover(0)
+        html = self.view.popups[-1]['content']
+        self.assertNotIn('display: block', html)
+        self.assertNotIn('display:block', html)
 
     def test_ignores_hovers_outside_the_text_area(self):
         self.listener.on_hover(self.view, self.regions()[0].begin(), sublime.HOVER_GUTTER)
@@ -119,25 +129,54 @@ class HoverTest(PluginTestCase):
         self.assertIn('&lt;b&gt;&amp;x', html)
         self.assertNotIn('<b>&x', html)
 
-    def test_static_mode_serves_a_png(self):
+    def test_static_mode_serves_a_single_frame(self):
         stub.SETTINGS.set('animate', False)
         self.hover(0)
         self.assertIn('data:image/png;base64,', self.view.popups[-1]['content'])
+        self.assertEqual(self.view.updates, [])
+
+
+class AnimationTest(PluginTestCase):
+    """minihtml will not animate a GIF, so frames are swapped with update_popup."""
+
+    def test_animation_advances_the_image(self):
+        self.hover(1, limit=6)
+        self.assertGreater(len(self.view.updates), 1)
+        self.assertNotEqual(self.view.updates[0], self.view.updates[1])
+
+    def test_animation_stops_when_the_popup_closes(self):
+        self.hover(1, limit=6)
+        self.view.hide_popup()
+        before = len(self.view.updates)
+        stub.drain(50)
+        self.assertEqual(len(self.view.updates), before)
+
+    def test_animation_stops_when_a_newer_hover_takes_over(self):
+        self.hover(1, limit=4)
+        self.plugin._hover_token += 1          # simulate a later hover
+        before = len(self.view.updates)
+        stub.drain(50)
+        self.assertEqual(len(self.view.updates), before)
+
+    def test_static_mode_schedules_no_animation(self):
+        stub.SETTINGS.set('animate', False)
+        self.hover(0, limit=20)
+        self.assertEqual(self.view.updates, [])
 
 
 class CacheTest(PluginTestCase):
     def test_repeat_hover_reuses_the_cached_render(self):
         self.hover(1)
         calls = []
-        real = self.plugin.render.render
-        self.plugin.render.render = lambda *a, **k: calls.append(1) or real(*a, **k)
+        real = self.plugin.render.build
+        self.plugin.render.build = lambda *a, **k: calls.append(1) or real(*a, **k)
         try:
             self.hover(1)
             self.assertEqual(calls, [])
             self.hover(2)
             self.assertEqual(len(calls), 1)
         finally:
-            self.plugin.render.render = real
+            self.plugin.render.build = real
 
     def test_changing_settings_clears_the_cache_and_rescans(self):
         self.hover(1)

@@ -14,13 +14,15 @@
 
 	// Animate the preview. Set to false for a static image that strobes the
 	// motion instead, which renders faster and uses far less memory.
+	// Sublime cannot animate an image on its own, so an animated preview is
+	// played by swapping the picture on a timer while the popup is open.
 	"animate": true,
 
 	// Underline easing functions in the buffer to show they can be hovered.
 	"underline": true,
 
 	// Colour scheme scope used for that underline. The region.* scopes are
-	// provided by every Sublime Text colour scheme.
+	// provided by every Sublime Text 4 colour scheme.
 	"underline_scope": "region.bluish",
 
 	// Scopes in which easing previews are active. Matching is by prefix, so
@@ -36,5 +38,9 @@
 	],
 
 	// Skip scanning buffers larger than this many bytes.
-	"max_file_size": 1048576
+	"max_file_size": 1048576,
+
+	// Log what the plugin is doing to the console (View > Show Console).
+	// Failures are always reported there; this adds the successful steps.
+	"debug": false
 }

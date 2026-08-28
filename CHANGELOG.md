@@ -12,8 +12,13 @@ Everything below 2.0.0 describes the VS Code extension this was forked from.
 -   Numeric evaluation of every supported easing, so `linear()` now animates
     correctly. The VS Code extension could only draw it, because its renderer
     had no `linear()` support.
--   Pure-Python PNG and animated-GIF encoders and a small anti-aliased
-    rasteriser, since minihtml renders neither SVG nor CSS animation.
+-   Pure-Python PNG and GIF encoders and a small anti-aliased rasteriser,
+    since minihtml renders neither SVG nor CSS animation.
+-   Animation by swapping the preview image with `update_popup` on a timer.
+    minihtml supports no CSS animation, and paints only the first frame of an
+    animated GIF, so the animation has to be driven by the plugin. The GIF
+    encoder is kept for generating the README asset via
+    `tools/make_preview.py`.
 -   An `animate` setting. When `false`, the preview is a static strobe of the
     motion rather than a GIF: faster to render and far smaller.
 -   A test suite runnable outside Sublime Text with `python3 tests/run.py`.
@@ -39,6 +44,9 @@ Everything below 2.0.0 describes the VS Code extension this was forked from.
 
 ### Fixed
 
+-   Submodules under `core/` are reloaded along with the top-level plugin.
+    Sublime caches modules in subdirectories, so an updated `core/` would
+    otherwise keep running the previously imported copy until a restart.
 -   Easings that overshoot no longer escape the preview area.
 -   Adjacent easings are both detected. The upstream pattern consumed the
     delimiter following a match, so the second of `ease,ease` was missed.

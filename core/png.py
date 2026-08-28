@@ -19,13 +19,15 @@ def _chunk(tag, payload):
     )
 
 
-def encode(pixels, width, height, palette):
+def encode(pixels, width, height, palette, level=9):
     """Encode an indexed-colour image as PNG bytes.
 
     :param pixels: flat row-major bytearray of palette indices, len == w * h.
     :param width: image width in pixels.
     :param height: image height in pixels.
     :param palette: list of (r, g, b) tuples, at most 256 entries.
+    :param level: zlib compression level. Animation frames are transient and
+        favour latency over size, so they compress at a lower level.
     :returns: the complete PNG file as bytes.
     """
     if len(pixels) != width * height:
@@ -48,6 +50,6 @@ def encode(pixels, width, height, palette):
         b'\x89PNG\r\n\x1a\n'
         + _chunk(b'IHDR', ihdr)
         + _chunk(b'PLTE', plte)
-        + _chunk(b'IDAT', zlib.compress(bytes(raw), 9))
+        + _chunk(b'IDAT', zlib.compress(bytes(raw), level))
         + _chunk(b'IEND', b'')
     )

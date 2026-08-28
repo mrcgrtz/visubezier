@@ -28,36 +28,53 @@ class RenderTest(unittest.TestCase):
         'linear(0 0%, -0.25, 1.25, 1 100%)',
     ]
 
-    def test_every_supported_easing_renders_a_gif(self):
+    def test_every_supported_easing_renders_frames(self):
         for expression in self.EXPRESSIONS:
-            result = render.render(expression)
+            result = render.build(expression)
             self.assertIsNotNone(result, expression)
-            data, mime = result
-            self.assertEqual(mime, 'image/gif', expression)
-            self.assertTrue(data.startswith(b'GIF89a'), expression)
+            self.assertEqual(result['mime'], 'image/png', expression)
+            self.assertGreater(len(result['frames']), 1, expression)
+            for frame in result['frames']:
+                self.assertTrue(frame.startswith(b'\x89PNG\r\n\x1a\n'), expression)
 
-    def test_static_mode_renders_a_png(self):
-        data, mime = render.render('ease', animate=False)
-        self.assertEqual(mime, 'image/png')
-        self.assertTrue(data.startswith(b'\x89PNG\r\n\x1a\n'))
+    def test_frames_differ_from_one_another(self):
+        # A sequence of identical stills would animate into nothing.
+        frames = render.build('ease-in-out')['frames']
+        self.assertGreater(len(set(frames)), len(frames) // 2)
+
+    def test_animation_has_a_usable_frame_delay(self):
+        result = render.build('ease', duration='1s')
+        self.assertGreaterEqual(result['delay_ms'], 20)
+        self.assertLessEqual(result['delay_ms'] * len(result['frames']), 4000)
+
+    def test_static_mode_renders_one_frame(self):
+        result = render.build('ease', animate=False)
+        self.assertEqual(result['mime'], 'image/png')
+        self.assertEqual(len(result['frames']), 1)
+        self.assertEqual(result['delay_ms'], 0)
+        self.assertTrue(result['frames'][0].startswith(b'\x89PNG\r\n\x1a\n'))
 
     def test_static_output_is_far_smaller_than_animated(self):
-        static, _ = render.render('ease', animate=False)
-        animated, _ = render.render('ease', animate=True)
-        self.assertLess(len(static), len(animated))
+        static = sum(len(f) for f in render.build('ease', animate=False)['frames'])
+        animated = sum(len(f) for f in render.build('ease', animate=True)['frames'])
+        self.assertLess(static, animated)
 
     def test_unparseable_expression_renders_nothing(self):
-        self.assertIsNone(render.render('wobble'))
-        self.assertIsNone(render.render('cubic-bezier(1,2)'))
+        self.assertIsNone(render.build('wobble'))
+        self.assertIsNone(render.build('cubic-bezier(1,2)'))
 
     def test_unparseable_reference_falls_back_rather_than_failing(self):
-        result = render.render('ease', reference='wobble')
-        self.assertIsNotNone(result)
+        self.assertIsNotNone(render.build('ease', reference='wobble'))
 
     def test_duration_drives_frame_count(self):
-        short, _ = render.render('ease', duration='0.2s')
-        long, _ = render.render('ease', duration='2s')
+        short = render.build('ease', duration='0.2s')['frames']
+        long = render.build('ease', duration='2s')['frames']
         self.assertLess(len(short), len(long))
+
+    def test_gif_export_still_works_for_the_readme_asset(self):
+        data = render.render_gif('ease-in-out')
+        self.assertTrue(data.startswith(b'GIF89a'))
+        self.assertIsNone(render.render_gif('wobble'))
 
     def test_frame_geometry_is_clamped(self):
         for duration, expected in ((0.01, render.MIN_FORWARD_FRAMES),
@@ -75,12 +92,14 @@ class RenderTest(unittest.TestCase):
             self.assertLessEqual(x + render.SQUARE_SIZE, render.TRACK_WIDTH)
 
     def test_colour_settings_change_the_output(self):
-        default, _ = render.render('ease')
-        recoloured, _ = render.render('ease', background='#000000', foreground='#ff0000')
+        default = render.build('ease')['frames']
+        recoloured = render.build('ease', background='#000000',
+                                  foreground='#ff0000')['frames']
         self.assertNotEqual(default, recoloured)
 
     def test_data_uri_is_well_formed(self):
-        data, mime = render.render('ease', animate=False)
+        result = render.build('ease', animate=False)
+        data, mime = result['frames'][0], result['mime']
         uri = render.data_uri(data, mime)
         self.assertTrue(uri.startswith('data:image/png;base64,'))
         import base64

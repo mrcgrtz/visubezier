@@ -45,10 +45,15 @@ GRID_ALPHA = 0.35
 STROKE_WIDTH = 2.0
 
 #: Animation sampling. Frame count is derived from the duration and clamped so
-#: that neither very short nor very long durations produce a silly GIF.
-TARGET_FPS = 25
+#: that neither very short nor very long durations produce a silly frame count.
+TARGET_FPS = 20
 MIN_FORWARD_FRAMES = 4
-MAX_FORWARD_FRAMES = 60
+MAX_FORWARD_FRAMES = 48
+
+#: Animation frames are transient and re-encoded on every cache miss, so they
+#: trade size for latency. The static preview is kept small instead.
+FRAME_COMPRESSION = 6
+STATIC_COMPRESSION = 9
 
 #: Number of strobe positions drawn when animation is switched off.
 STATIC_SAMPLES = 9
@@ -119,13 +124,42 @@ def _square_x(value):
 
 
 def _frame_geometry(duration):
-    """Choose a frame count and per-frame delay for the given duration."""
+    """Choose a frame count and per-frame delay in milliseconds."""
     forward = int(round(duration * TARGET_FPS))
     forward = max(MIN_FORWARD_FRAMES, min(forward, MAX_FORWARD_FRAMES))
-    # GIF delays are in hundredths of a second, and renderers treat very small
-    # delays inconsistently, so keep at least two.
-    delay = max(2, int(round(duration * 100.0 / forward)))
-    return forward, delay
+    return forward, max(20, int(round(duration * 1000.0 / forward)))
+
+
+def _timeline(forward):
+    """Sample times for one `alternate` cycle, without repeating either end."""
+    times = [i / (forward - 1) for i in range(forward)]
+    return times + list(reversed(times[1:-1]))
+
+
+def _base_canvas(custom, palette):
+    """The static furniture: track, grid and the easing plot."""
+    canvas = raster.Canvas(WIDTH, HEIGHT)
+    _draw_track(canvas)
+    _draw_plot(canvas, custom)
+    return canvas
+
+
+def _compose(base, default, custom, time):
+    """Copy the static background and place both squares for a moment in time."""
+    canvas = base.copy()
+    for row_y, fn in ((DEFAULT_ROW_Y, default), (CUSTOM_ROW_Y, custom)):
+        canvas.fill_rect(_square_x(fn.at(time)), row_y, SQUARE_SIZE, SQUARE_SIZE)
+    return canvas
+
+
+def _parse_pair(expression, reference):
+    """Parse the previewed easing and its reference, or None if the first fails."""
+    custom = easing_module.parse(expression)
+    if custom is None:
+        return None
+    # An unparseable reference should not stop the preview; fall back to linear.
+    default = easing_module.parse(reference) or easing_module.parse('linear')
+    return default, custom
 
 
 def _draw_strobe(canvas, default, custom):
@@ -142,63 +176,80 @@ def _draw_strobe(canvas, default, custom):
             canvas.fill_rect(_square_x(fn.at(time)), row_y, SQUARE_SIZE, SQUARE_SIZE, alpha)
 
 
-def render(expression, reference='linear', background='#2d2d30', foreground='#d7d7d7',
-           duration='1s', animate=True):
-    """Render the hover preview for an easing expression.
+def build(expression, reference='linear', background='#2d2d30', foreground='#d7d7d7',
+          duration='1s', animate=True):
+    """Render the hover preview.
+
+    minihtml paints only the first frame of an animated GIF, so animation is
+    delivered as a sequence of stills that the plugin cycles through with
+    `update_popup` instead. A static preview is a single-frame sequence.
 
     :param expression: the easing to preview.
-    :param reference: easing to animate alongside it for comparison.
+    :param reference: easing drawn alongside it for comparison.
     :param background: preview background colour, as a hex string.
     :param foreground: preview foreground colour, as a hex string.
     :param duration: animation duration, as a CSS time string.
-    :param animate: when False, emit a static PNG strobe instead of a GIF.
-    :returns: (image bytes, mime type), or None if the expression is unparseable.
+    :param animate: when False, produce one static strobe frame.
+    :returns: dict with `frames` (list of PNG byte strings), `mime` and
+        `delay_ms`, or None if the expression could not be parsed.
     """
-    custom = easing_module.parse(expression)
-    if custom is None:
+    parsed = _parse_pair(expression, reference)
+    if parsed is None:
         return None
-
-    # An unparseable reference should not stop the preview; fall back to linear.
-    default = easing_module.parse(reference) or easing_module.parse('linear')
+    default, custom = parsed
 
     palette = raster.build_palette(
         raster.parse_color(background, (45, 45, 48)),
         raster.parse_color(foreground, (215, 215, 215)),
     )
-
-    base = raster.Canvas(WIDTH, HEIGHT)
-    _draw_track(base)
-    _draw_plot(base, custom)
+    base = _base_canvas(custom, palette)
 
     if not animate:
         _draw_strobe(base, default, custom)
-        return png.encode(base.pixels, WIDTH, HEIGHT, palette), 'image/png'
+        frame = png.encode(base.pixels, WIDTH, HEIGHT, palette, STATIC_COMPRESSION)
+        return {'frames': [frame], 'mime': 'image/png', 'delay_ms': 0}
 
-    forward, delay = _frame_geometry(parse_duration(duration))
+    forward, delay_ms = _frame_geometry(parse_duration(duration))
+    frames = [
+        png.encode(_compose(base, default, custom, time).pixels,
+                   WIDTH, HEIGHT, palette, FRAME_COMPRESSION)
+        for time in _timeline(forward)
+    ]
+    return {'frames': frames, 'mime': 'image/png', 'delay_ms': delay_ms}
 
-    # `alternate` playback: run forward, then back without repeating either end.
-    times = [i / (forward - 1) for i in range(forward)]
-    times += list(reversed(times[1:-1]))
+
+def render_gif(expression, reference='linear', background='#2d2d30',
+               foreground='#d7d7d7', duration='1s'):
+    """Render the preview as an animated GIF.
+
+    Unused by the plugin, since minihtml will not animate it. Kept for
+    generating the animated preview in the README -- see tools/make_preview.py.
+    """
+    parsed = _parse_pair(expression, reference)
+    if parsed is None:
+        return None
+    default, custom = parsed
+
+    palette = raster.build_palette(
+        raster.parse_color(background, (45, 45, 48)),
+        raster.parse_color(foreground, (215, 215, 215)),
+    )
+    base = _base_canvas(custom, palette)
+    forward, delay_ms = _frame_geometry(parse_duration(duration))
+    delay = max(2, int(round(delay_ms / 10.0)))
 
     frames = []
-    previous_rects = None
-    for index, time in enumerate(times):
-        canvas = base.copy()
-        rects = []
-        for row_y, fn in ((DEFAULT_ROW_Y, default), (CUSTOM_ROW_Y, custom)):
-            x = _square_x(fn.at(time))
-            canvas.fill_rect(x, row_y, SQUARE_SIZE, SQUARE_SIZE)
-            rects.append((x, row_y))
-
+    previous = None
+    for index, time in enumerate(_timeline(forward)):
+        canvas = _compose(base, default, custom, time)
+        positions = [_square_x(fn.at(time)) for fn in (default, custom)]
         if index == 0:
-            frames.append({
-                'pixels': canvas.pixels, 'x': 0, 'y': 0,
-                'width': WIDTH, 'height': HEIGHT, 'delay': delay,
-            })
+            frames.append({'pixels': canvas.pixels, 'x': 0, 'y': 0,
+                           'width': WIDTH, 'height': HEIGHT, 'delay': delay})
         else:
             # Ship only the region the squares vacated or entered. Anti-aliased
             # edges spill a pixel either side, so pad the bounds by one.
-            xs = [x for x, _ in rects + previous_rects]
+            xs = positions + previous
             left = max(0, int(min(xs)) - 1)
             right = min(WIDTH, int(max(xs)) + SQUARE_SIZE + 2)
             top = max(0, DEFAULT_ROW_Y - 1)
@@ -206,14 +257,13 @@ def render(expression, reference='linear', background='#2d2d30', foreground='#d7
             frames.append({
                 'pixels': canvas.sub_rect(left, top, right - left, bottom - top),
                 'x': left, 'y': top,
-                'width': right - left, 'height': bottom - top,
-                'delay': delay,
+                'width': right - left, 'height': bottom - top, 'delay': delay,
             })
-        previous_rects = rects
+        previous = positions
 
-    return gif.encode(frames, WIDTH, HEIGHT, palette), 'image/gif'
+    return gif.encode(frames, WIDTH, HEIGHT, palette)
 
 
-def data_uri(image, mime):
+def data_uri(image, mime='image/png'):
     """Wrap encoded image bytes in a data: URI for use in a minihtml <img>."""
     return 'data:%s;base64,%s' % (mime, base64.b64encode(image).decode('ascii'))

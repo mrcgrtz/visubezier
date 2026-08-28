@@ -17,6 +17,10 @@ Supported easings:
 -   `steps()` with every jumpterm — `start`, `end`, `jump-start`, `jump-end`, `jump-both`, `jump-none`
 -   `linear()`, with explicit, implicit and doubled stop positions
 
+## Requirements
+
+Sublime Text 4. The package uses the 3.8 plugin host, declared in `.python-version`.
+
 ## Installation
 
 ### Package Control
@@ -32,7 +36,9 @@ cd "$(python3 -c 'import sublime; print(sublime.packages_path())' 2>/dev/null ||
 git clone https://github.com/mrcgrtz/visubezier.git VisuBezier
 ```
 
-The directory must be named `VisuBezier` for the menu entries to resolve.
+The directory must be named `VisuBezier` — note the capitalisation. The menu and command palette entries reference `${packages}/VisuBezier/`, so a clone named `visubezier` loads and previews fine but has no Settings entry under **Preferences → Package Settings**.
+
+Changes to files under `core/` are picked up on the next reload of `visubezier.py`; if a pull ever seems to have no effect, restarting Sublime Text is the reliable reset.
 
 ## Settings
 
@@ -44,7 +50,7 @@ Open them from **Preferences → Package Settings → VisuBezier → Settings**.
 | `duration` | `"1s"` | Duration of one pass of the animation, as a CSS time. |
 | `background` | `"#2d2d30"` | Background colour of the preview image. |
 | `foreground` | `"#d7d7d7"` | Colour of the curve, grid and animated squares. |
-| `animate` | `true` | When `false`, render a static strobe of the motion instead of a GIF. |
+| `animate` | `true` | When `false`, render a static strobe of the motion instead of playing it. |
 | `underline` | `true` | Underline easing functions in the buffer. |
 | `underline_scope` | `"region.bluish"` | Colour scheme scope used for that underline. |
 | `selectors` | see below | Scopes in which previews are active. |
@@ -88,7 +94,9 @@ Sublime Text's popup renderer, [minihtml](https://www.sublimetext.com/docs/minih
 
 -   `core/easing.py` parses and **evaluates** each easing — a Newton-Raphson solver for `cubic-bezier()`, jumpterm arithmetic for `steps()`, piecewise interpolation for `linear()`.
 -   `core/raster.py` draws into an indexed-colour canvas whose palette is a single foreground-over-background ramp, giving anti-aliasing for free.
--   `core/png.py` and `core/gif.py` encode that canvas, the latter as a looping animation whose frames carry only the region that changed.
+-   `core/png.py` encodes that canvas.
+
+minihtml also paints only the first frame of an animated GIF, so animation cannot be delegated to the image format either. An animated preview is instead a sequence of stills that the plugin cycles through with `update_popup` while the popup is open. `core/gif.py` survives for one job — generating the animated `preview.gif` above, via `tools/make_preview.py`.
 
 All of it is pure Python with no third-party dependencies.
 
@@ -104,7 +112,8 @@ All of it is pure Python with no third-party dependencies.
 ## Known issues
 
 -   Easing functions containing anything other than numbers are ignored, including `calc()` and `var()`.
--   Rendering an animated preview takes a couple of hundred milliseconds the first time; results are cached per easing and settings combination. Set `"animate": false` if you would rather have instant static previews.
+-   Rendering an animated preview takes roughly 60 ms the first time; results are cached per easing and settings combination. Set `"animate": false` for instant static previews.
+-   Animation runs on a timer driven by the plugin, because minihtml supports neither CSS animation nor animated GIFs. It stops as soon as the popup closes.
 
 ## Tests
 
