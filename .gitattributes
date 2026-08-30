@@ -3,3 +3,12 @@
 
 *.gif binary
 *.png binary
+
+# Keep development files out of the installed package.
+# .python-version stays: Sublime Text reads it to pick the 3.8 plugin host.
+.gitattributes export-ignore
+.gitignore export-ignore
+preview.gif export-ignore
+visubezier.png export-ignore
+tests/ export-ignore
+tools/ export-ignore
