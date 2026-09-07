@@ -1,7 +1,7 @@
 MIT License
 
-Copyright (c) 2018 Christopher Kirk-Nielsen
-Copyright (c) 2026 Marc Goertz (Sublime Text port)
+Copyright (c) 2018 Christopher Kirk-Nielsen  
+Copyright (c) 2026 Marc Görtz (Sublime Text port)
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
