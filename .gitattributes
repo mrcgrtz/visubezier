@@ -6,6 +6,7 @@
 
 # Keep development files out of the installed package.
 # .python-version stays: Sublime Text reads it to pick the 3.8 plugin host.
+.github/ export-ignore
 .gitattributes export-ignore
 .gitignore export-ignore
 preview.gif export-ignore
