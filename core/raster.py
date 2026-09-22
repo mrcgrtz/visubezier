@@ -83,19 +83,63 @@ class Canvas:
             self.pixels[offset] = level
 
     def fill_rect(self, x, y, width, height, alpha=1.0):
-        """Fill an axis-aligned rectangle, anti-aliasing fractional edges."""
+        """Fill an axis-aligned rectangle, anti-aliasing fractional edges.
+
+        This is the hot path of the animation: two squares are repainted on
+        every frame. Horizontal coverage is the same for every row, so it is
+        computed once rather than per pixel, and a run of columns that comes
+        out fully covered at full alpha is written with a single slice
+        assignment instead of a per-pixel blend, since it always resolves to
+        the palette's top level regardless of what was underneath.
+        """
+        if alpha <= 0:
+            return
         left, right = x, x + width
         top, bottom = y, y + height
-        for py in range(int(math.floor(top)), int(math.ceil(bottom))):
-            # Vertical coverage of this pixel row against the rectangle.
+        top_i, bottom_i = int(math.floor(top)), int(math.ceil(bottom))
+        left_i, right_i = int(math.floor(left)), int(math.ceil(right))
+        if bottom_i <= top_i or right_i <= left_i:
+            return
+
+        width_px, height_px = self.width, self.height
+        columns = []
+        for px in range(max(0, left_i), min(width_px, right_i)):
+            cover_x = min(right, px + 1) - max(left, px)
+            if cover_x > 0:
+                columns.append((px, cover_x))
+        if not columns:
+            return
+
+        full_run = None
+        if alpha >= 1.0:
+            run = [px for px, cover_x in columns if cover_x >= 1.0]
+            if run:
+                full_run = (run[0], run[-1] + 1)
+
+        pixels = self.pixels
+        max_level = _MAX_LEVEL
+        fill_byte = bytes((max_level,))
+
+        for py in range(max(0, top_i), min(height_px, bottom_i)):
             cover_y = min(bottom, py + 1) - max(top, py)
             if cover_y <= 0:
                 continue
-            for px in range(int(math.floor(left)), int(math.ceil(right))):
-                cover_x = min(right, px + 1) - max(left, px)
-                if cover_x <= 0:
+            row_offset = py * width_px
+            row_alpha = alpha * cover_y
+
+            edge_columns = columns
+            if full_run is not None and row_alpha >= 1.0:
+                start, end = full_run
+                pixels[row_offset + start:row_offset + end] = fill_byte * (end - start)
+                edge_columns = [pair for pair in columns if pair[0] < start or pair[0] >= end]
+
+            for px, cover_x in edge_columns:
+                level = int(round(min(row_alpha * cover_x, 1.0) * max_level))
+                if level <= 0:
                     continue
-                self.blend(px, py, alpha * cover_x * cover_y)
+                offset = row_offset + px
+                if level > pixels[offset]:
+                    pixels[offset] = level
 
     def circle(self, cx, cy, radius, alpha=1.0):
         """Fill a circle, estimating edge coverage by 4x4 supersampling."""
