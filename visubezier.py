@@ -40,6 +40,7 @@ DEFAULTS = {
     'background': '#2d2d30',
     'foreground': '#d7d7d7',
     'animate': True,
+    'show_track': True,
     'underline': True,
     'underline_scope': 'region.bluish',
     'selectors': [
@@ -188,8 +189,13 @@ def _cache_put(key, value):
         del _cache[_cache_order.pop(0)]
 
 
-def _popup_html(expression, reference, uri):
-    """Build the minihtml for the hover popup."""
+def _popup_html(expression, reference, uri, width, height):
+    """Build the minihtml for the hover popup.
+
+    `reference` is None for a curve-only preview: with nothing animating
+    alongside the curve, naming the reference easing would only mislead.
+    """
+    label = ('<div class="label">%s</div>' % _escape(reference)) if reference else ''
     return """
         <body id="visubezier">
             <style>
@@ -202,11 +208,11 @@ def _popup_html(expression, reference, uri):
                 }
                 .easing { color: var(--foreground); }
             </style>
-            <div class="label">%s</div>
+            %s
             <div class="preview"><img src="%s" width="%d" height="%d"></div>
             <div class="label easing">%s</div>
         </body>
-    """ % (_escape(reference), uri, render.WIDTH, render.HEIGHT, _escape(expression))
+    """ % (label, uri, width, height, _escape(expression))
 
 
 def _escape(text):
@@ -225,7 +231,8 @@ def _show(view, point, expression, reference, preview, token):
     """
     frames = preview['uris']
     view.show_popup(
-        _popup_html(expression, reference, frames[0]),
+        _popup_html(expression, reference, frames[0],
+                    preview['width'], preview['height']),
         sublime.HIDE_ON_MOUSE_MOVE_AWAY,
         location=point,
         max_width=560,
@@ -249,7 +256,8 @@ def _advance(view, token, expression, reference, preview, index):
             _log('animation stopped at frame %d: popup no longer visible' % index)
             return
         try:
-            view.update_popup(_popup_html(expression, reference, frames[index]))
+            view.update_popup(_popup_html(expression, reference, frames[index],
+                                          preview['width'], preview['height']))
         except Exception:
             _report('could not update the popup')
             return
@@ -301,7 +309,10 @@ class VisuBezierListener(sublime_plugin.EventListener):
     def _preview(self, view, point, expression):
         global _hover_token
 
+        show_track = bool(_setting('show_track'))
         reference = str(_setting('reference_easing_function'))
+        # Only labelled when it is actually drawn; see _popup_html.
+        label = reference if show_track else None
         key = (
             expression.lower(),
             reference.lower(),
@@ -309,6 +320,7 @@ class VisuBezierListener(sublime_plugin.EventListener):
             str(_setting('background')),
             str(_setting('foreground')),
             bool(_setting('animate')),
+            bool(_setting('show_track')),
         )
 
         _hover_token += 1
@@ -316,7 +328,7 @@ class VisuBezierListener(sublime_plugin.EventListener):
 
         cached = _cache_get(key)
         if cached is not None:
-            _show(view, point, expression, reference, cached, token)
+            _show(view, point, expression, label, cached, token)
             return
 
         def work():
@@ -328,6 +340,7 @@ class VisuBezierListener(sublime_plugin.EventListener):
                     foreground=str(_setting('foreground')),
                     duration=str(_setting('duration')),
                     animate=bool(_setting('animate')),
+                    show_track=show_track,
                 )
             except Exception:
                 _report('failed to render a preview for %r' % expression)
@@ -339,6 +352,8 @@ class VisuBezierListener(sublime_plugin.EventListener):
                 'uris': [render.data_uri(frame, result['mime'])
                          for frame in result['frames']],
                 'delay_ms': result['delay_ms'],
+                'width': result['width'],
+                'height': result['height'],
             }
             _log('rendered %r: %d frame(s), %d ms apart'
                  % (expression, len(preview['uris']), preview['delay_ms']))
@@ -350,7 +365,7 @@ class VisuBezierListener(sublime_plugin.EventListener):
                     _log('discarding a superseded preview for %r' % expression)
                     return
                 try:
-                    _show(view, point, expression, reference, preview, token)
+                    _show(view, point, expression, label, preview, token)
                 except Exception:
                     _report('failed to show the preview for %r' % expression)
 

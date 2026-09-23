@@ -5,6 +5,10 @@ reference easing. Because minihtml has no animation support, the animation is
 baked into a looping GIF: each frame is composed on a copy of a pre-rendered
 static background, and only the rectangle that actually changed is encoded.
 
+The track can be switched off entirely, leaving a small canvas holding nothing
+but the plot. Preview size therefore varies, so `build` reports the dimensions
+it rendered at rather than leaving callers to read the module constants.
+
 Text labels are deliberately absent from the raster -- the plugin renders them
 as real minihtml text so they pick up the user's colour scheme and font.
 """
@@ -40,6 +44,13 @@ BOX_SIZE = 60
 BOX_X = TRACK_WIDTH + (WIDTH - TRACK_WIDTH - BOX_SIZE) // 2
 BOX_Y = (HEIGHT - BOX_SIZE) // 2
 
+#: The curve-only preview is the same plot box on a canvas of its own, so the
+#: curve is drawn at an identical scale whether or not the track is shown.
+CURVE_WIDTH = 100
+CURVE_HEIGHT = 100
+CURVE_BOX_X = (CURVE_WIDTH - BOX_SIZE) // 2
+CURVE_BOX_Y = (CURVE_HEIGHT - BOX_SIZE) // 2
+
 HANDLE_RADIUS = 2.5
 GRID_ALPHA = 0.35
 STROKE_WIDTH = 2.0
@@ -74,38 +85,38 @@ def parse_duration(text, fallback=1.0):
     return value if value > 0 else fallback
 
 
-def _plot_point(time, value):
+def _plot_point(time, value, box_x, box_y):
     """Map a unit-space (time, value) pair into canvas coordinates."""
-    return (BOX_X + time * BOX_SIZE, BOX_Y + BOX_SIZE - value * BOX_SIZE)
+    return (box_x + time * BOX_SIZE, box_y + BOX_SIZE - value * BOX_SIZE)
 
 
-def _draw_plot(canvas, easing):
+def _draw_plot(canvas, easing, box_x, box_y):
     """Draw the grid, box and easing curve into the plot area."""
     # Box outline.
-    canvas.line(BOX_X, BOX_Y, BOX_X + BOX_SIZE, BOX_Y, GRID_ALPHA)
-    canvas.line(BOX_X, BOX_Y + BOX_SIZE, BOX_X + BOX_SIZE, BOX_Y + BOX_SIZE, GRID_ALPHA)
-    canvas.line(BOX_X, BOX_Y, BOX_X, BOX_Y + BOX_SIZE, GRID_ALPHA)
-    canvas.line(BOX_X + BOX_SIZE, BOX_Y, BOX_X + BOX_SIZE, BOX_Y + BOX_SIZE, GRID_ALPHA)
+    canvas.line(box_x, box_y, box_x + BOX_SIZE, box_y, GRID_ALPHA)
+    canvas.line(box_x, box_y + BOX_SIZE, box_x + BOX_SIZE, box_y + BOX_SIZE, GRID_ALPHA)
+    canvas.line(box_x, box_y, box_x, box_y + BOX_SIZE, GRID_ALPHA)
+    canvas.line(box_x + BOX_SIZE, box_y, box_x + BOX_SIZE, box_y + BOX_SIZE, GRID_ALPHA)
 
     # Quarter divisions on both axes.
     for fraction in (0.25, 0.5, 0.75):
         offset = BOX_SIZE * fraction
-        canvas.line(BOX_X, BOX_Y + offset, BOX_X + BOX_SIZE, BOX_Y + offset, GRID_ALPHA)
-        canvas.line(BOX_X + offset, BOX_Y, BOX_X + offset, BOX_Y + BOX_SIZE, GRID_ALPHA)
+        canvas.line(box_x, box_y + offset, box_x + BOX_SIZE, box_y + offset, GRID_ALPHA)
+        canvas.line(box_x + offset, box_y, box_x + offset, box_y + BOX_SIZE, GRID_ALPHA)
 
     # Control-point handles, for cubic-bezier only.
     handles = easing.handles()
     if handles:
-        start = _plot_point(0.0, 0.0)
-        end = _plot_point(1.0, 1.0)
-        first = _plot_point(*handles[0])
-        second = _plot_point(*handles[1])
+        start = _plot_point(0.0, 0.0, box_x, box_y)
+        end = _plot_point(1.0, 1.0, box_x, box_y)
+        first = _plot_point(handles[0][0], handles[0][1], box_x, box_y)
+        second = _plot_point(handles[1][0], handles[1][1], box_x, box_y)
         canvas.line(start[0], start[1], first[0], first[1], 1.0)
         canvas.line(end[0], end[1], second[0], second[1], 1.0)
         canvas.circle(first[0], first[1], HANDLE_RADIUS)
         canvas.circle(second[0], second[1], HANDLE_RADIUS)
 
-    points = [_plot_point(time, value) for time, value in easing.points()]
+    points = [_plot_point(time, value, box_x, box_y) for time, value in easing.points()]
     canvas.polyline(points, 1.0, STROKE_WIDTH)
 
 
@@ -136,11 +147,20 @@ def _timeline(forward):
     return times + list(reversed(times[1:-1]))
 
 
-def _base_canvas(custom, palette):
-    """The static furniture: track, grid and the easing plot."""
+def _base_canvas(custom, show_track=True):
+    """The static furniture: the easing plot, and the track when it is shown.
+
+    Without the track the plot gets a canvas of its own, cropped tight around
+    the box, so the curve is drawn at the same scale either way.
+    """
+    if not show_track:
+        canvas = raster.Canvas(CURVE_WIDTH, CURVE_HEIGHT)
+        _draw_plot(canvas, custom, CURVE_BOX_X, CURVE_BOX_Y)
+        return canvas
+
     canvas = raster.Canvas(WIDTH, HEIGHT)
     _draw_track(canvas)
-    _draw_plot(canvas, custom)
+    _draw_plot(canvas, custom, BOX_X, BOX_Y)
     return canvas
 
 
@@ -176,8 +196,16 @@ def _draw_strobe(canvas, default, custom):
             canvas.fill_rect(_square_x(fn.at(time)), row_y, SQUARE_SIZE, SQUARE_SIZE, alpha)
 
 
+def _still(canvas, palette):
+    """Package a finished canvas as a single-frame preview."""
+    frame = png.encode(canvas.pixels, canvas.width, canvas.height, palette,
+                       STATIC_COMPRESSION)
+    return {'frames': [frame], 'mime': 'image/png', 'delay_ms': 0,
+            'width': canvas.width, 'height': canvas.height}
+
+
 def build(expression, reference='linear', background='#2d2d30', foreground='#d7d7d7',
-          duration='1s', animate=True):
+          duration='1s', animate=True, show_track=True):
     """Render the hover preview.
 
     minihtml paints only the first frame of an animated GIF, so animation is
@@ -190,8 +218,11 @@ def build(expression, reference='linear', background='#2d2d30', foreground='#d7d
     :param foreground: preview foreground colour, as a hex string.
     :param duration: animation duration, as a CSS time string.
     :param animate: when False, produce one static strobe frame.
-    :returns: dict with `frames` (list of PNG byte strings), `mime` and
-        `delay_ms`, or None if the expression could not be parsed.
+    :param show_track: when False, draw the curve alone and leave the
+        comparison track out, which makes `animate` moot.
+    :returns: dict with `frames` (list of PNG byte strings), `mime`,
+        `delay_ms`, `width` and `height`, or None if the expression could not
+        be parsed.
     """
     parsed = _parse_pair(expression, reference)
     if parsed is None:
@@ -202,12 +233,16 @@ def build(expression, reference='linear', background='#2d2d30', foreground='#d7d
         raster.parse_color(background, (45, 45, 48)),
         raster.parse_color(foreground, (215, 215, 215)),
     )
-    base = _base_canvas(custom, palette)
+    base = _base_canvas(custom, show_track)
+
+    # Nothing moves without the track, so a curve-only preview is one still
+    # however `animate` is set.
+    if not show_track:
+        return _still(base, palette)
 
     if not animate:
         _draw_strobe(base, default, custom)
-        frame = png.encode(base.pixels, WIDTH, HEIGHT, palette, STATIC_COMPRESSION)
-        return {'frames': [frame], 'mime': 'image/png', 'delay_ms': 0}
+        return _still(base, palette)
 
     forward, delay_ms = _frame_geometry(parse_duration(duration))
     frames = [
@@ -215,7 +250,8 @@ def build(expression, reference='linear', background='#2d2d30', foreground='#d7d
                    WIDTH, HEIGHT, palette, FRAME_COMPRESSION)
         for time in _timeline(forward)
     ]
-    return {'frames': frames, 'mime': 'image/png', 'delay_ms': delay_ms}
+    return {'frames': frames, 'mime': 'image/png', 'delay_ms': delay_ms,
+            'width': WIDTH, 'height': HEIGHT}
 
 
 def render_gif(expression, reference='linear', background='#2d2d30',
@@ -234,7 +270,7 @@ def render_gif(expression, reference='linear', background='#2d2d30',
         raster.parse_color(background, (45, 45, 48)),
         raster.parse_color(foreground, (215, 215, 215)),
     )
-    base = _base_canvas(custom, palette)
+    base = _base_canvas(custom)
     forward, delay_ms = _frame_geometry(parse_duration(duration))
     delay = max(2, int(round(delay_ms / 10.0)))
 

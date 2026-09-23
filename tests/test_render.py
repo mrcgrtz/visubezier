@@ -54,6 +54,53 @@ class RenderTest(unittest.TestCase):
         self.assertEqual(result['delay_ms'], 0)
         self.assertTrue(result['frames'][0].startswith(b'\x89PNG\r\n\x1a\n'))
 
+    def test_curve_only_mode_renders_one_small_frame(self):
+        result = render.build('ease', show_track=False)
+        self.assertEqual(len(result['frames']), 1)
+        self.assertEqual(result['delay_ms'], 0)
+        self.assertEqual(result['width'], render.CURVE_WIDTH)
+        self.assertEqual(result['height'], render.CURVE_HEIGHT)
+        self.assertTrue(result['frames'][0].startswith(b'\x89PNG\r\n\x1a\n'))
+
+    def test_curve_only_mode_ignores_animate(self):
+        # There is nothing in motion without the track, so asking for animation
+        # must not produce a sequence that would flicker in place.
+        animated = render.build('ease', show_track=False, animate=True)
+        still = render.build('ease', show_track=False, animate=False)
+        self.assertEqual(animated['frames'], still['frames'])
+
+    def test_curve_only_mode_ignores_the_reference_easing(self):
+        # The reference is only ever drawn on the track.
+        linear = render.build('ease', show_track=False, reference='linear')
+        bouncy = render.build('ease', show_track=False, reference='ease-in-out')
+        self.assertEqual(linear['frames'], bouncy['frames'])
+
+    def test_track_modes_report_their_own_size(self):
+        for kwargs, expected in (({}, (render.WIDTH, render.HEIGHT)),
+                                 ({'animate': False}, (render.WIDTH, render.HEIGHT)),
+                                 ({'show_track': False},
+                                  (render.CURVE_WIDTH, render.CURVE_HEIGHT))):
+            result = render.build('ease', **kwargs)
+            self.assertEqual((result['width'], result['height']), expected, kwargs)
+
+    def test_curve_only_output_is_smaller_still_than_the_strobe(self):
+        curve = sum(len(f) for f in render.build('ease', show_track=False)['frames'])
+        strobe = sum(len(f) for f in render.build('ease', animate=False)['frames'])
+        self.assertLess(curve, strobe)
+
+    def test_curve_only_mode_renders_every_supported_easing(self):
+        for expression in self.EXPRESSIONS:
+            result = render.build(expression, show_track=False)
+            self.assertIsNotNone(result, expression)
+            self.assertTrue(result['frames'][0].startswith(b'\x89PNG\r\n\x1a\n'),
+                            expression)
+
+    def test_curve_only_mode_still_draws_the_curve(self):
+        # A blank canvas would encode identically whatever the easing is.
+        frames = [render.build(expression, show_track=False)['frames'][0]
+                  for expression in ('linear', 'ease-in-out', 'steps(7)')]
+        self.assertEqual(len(set(frames)), len(frames))
+
     def test_static_output_is_far_smaller_than_animated(self):
         static = sum(len(f) for f in render.build('ease', animate=False)['frames'])
         animated = sum(len(f) for f in render.build('ease', animate=True)['frames'])

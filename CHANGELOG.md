@@ -2,6 +2,16 @@
 
 All notable changes to VisuBezier will be documented in this file.
 
+## Unreleased
+
+### Added
+
+-   A `show_track` setting. When `false`, the preview drops the animation
+    track and shows nothing but the plotted curve, for anyone who wants the
+    graph without the moving blocks. Nothing is in motion in that mode, so
+    `animate` no longer applies and the reference easing is neither drawn nor
+    labelled.
+
 ## 2.0.0 - 2026-08-28
 
 First release of the Sublime Text package, ported from the VS Code extension.
