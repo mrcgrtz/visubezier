@@ -1,0 +1,26 @@
+VisuBezier 2.1.0
+================
+
+A new "show_track" setting, and noticeably faster previews.
+
+show_track
+----------
+
+The preview normally pairs the plotted curve with an animation track: two
+blocks travelling alongside it, yours against the reference easing. Set
+
+    "show_track": false
+
+for a preview of nothing but the curve. Nothing moves in that mode, so
+"animate" has nothing left to do, and the reference easing is neither drawn
+nor labelled.
+
+Settings live under:
+    Preferences > Package Settings > VisuBezier > Settings
+
+Faster previews
+---------------
+
+Rendering is roughly 2.9 times faster. Filling rectangles, which took most
+of the time spent on every frame, no longer works pixel by pixel. The
+pictures themselves are unchanged.

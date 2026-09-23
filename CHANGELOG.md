@@ -2,7 +2,7 @@
 
 All notable changes to VisuBezier will be documented in this file.
 
-## Unreleased
+## 2.1.0 - 2026-09-23
 
 ### Added
 
@@ -11,6 +11,14 @@ All notable changes to VisuBezier will be documented in this file.
     graph without the moving blocks. Nothing is in motion in that mode, so
     `animate` no longer applies and the reference easing is neither drawn nor
     labelled.
+
+### Changed
+
+-   Preview rendering is roughly 2.9 times faster. `fill_rect()`, which
+    accounted for most of the work per frame, now computes horizontal
+    coverage once per rectangle instead of once per pixel, and writes fully
+    covered runs in a single slice assignment rather than blending each
+    pixel. The rendered output is unchanged.
 
 ## 2.0.0 - 2026-08-28
 
