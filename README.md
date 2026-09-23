@@ -10,7 +10,7 @@ Easing functions are underlined in the buffer. Hover one to see a plot of the cu
 
 Prefer just the graph? Set `"show_track": false` for a preview of the curve on its own.
 
-![Hover to preview](https://raw.githubusercontent.com/mrcgrtz/visubezier/master/preview.gif)
+![Hover to preview](https://raw.githubusercontent.com/mrcgrtz/visubezier/main/preview.gif)
 
 Supported easings:
 
