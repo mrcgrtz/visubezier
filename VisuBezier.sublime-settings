@@ -18,6 +18,11 @@
 	// played by swapping the picture on a timer while the popup is open.
 	"animate": true,
 
+	// Show the animation track -- the blocks travelling alongside the curve to
+	// compare it against the reference easing. Set to false for a preview of
+	// nothing but the curve, which leaves "animate" with nothing to do.
+	"show_track": true,
+
 	// Underline easing functions in the buffer to show they can be hovered.
 	"underline": true,
 

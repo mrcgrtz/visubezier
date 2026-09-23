@@ -135,6 +135,23 @@ class HoverTest(PluginTestCase):
         self.assertIn('data:image/png;base64,', self.view.popups[-1]['content'])
         self.assertEqual(self.view.updates, [])
 
+    def test_curve_only_mode_pins_the_image_to_the_smaller_size(self):
+        stub.SETTINGS.set('show_track', False)
+        self.hover(0)
+        html = self.view.popups[-1]['content']
+        self.assertIn('data:image/png;base64,', html)
+        self.assertIn('width="%d" height="%d"'
+                      % (self.plugin.render.CURVE_WIDTH,
+                         self.plugin.render.CURVE_HEIGHT), html)
+
+    def test_curve_only_mode_drops_the_reference_label(self):
+        # Nothing is drawn for the reference easing, so naming it would lie.
+        stub.SETTINGS.set('show_track', False)
+        self.hover(0)
+        html = self.view.popups[-1]['content']
+        self.assertNotIn('>linear<', html)
+        self.assertIn('>ease<', html)
+
 
 class AnimationTest(PluginTestCase):
     """minihtml will not animate a GIF, so frames are swapped with update_popup."""
@@ -163,6 +180,13 @@ class AnimationTest(PluginTestCase):
         self.hover(0, limit=20)
         self.assertEqual(self.view.updates, [])
 
+    def test_curve_only_mode_schedules_no_animation(self):
+        # Even with animation left on: a curve-only preview has one frame.
+        stub.SETTINGS.set('show_track', False)
+        stub.SETTINGS.set('animate', True)
+        self.hover(0, limit=20)
+        self.assertEqual(self.view.updates, [])
+
 
 class CacheTest(PluginTestCase):
     def test_repeat_hover_reuses_the_cached_render(self):
@@ -177,6 +201,13 @@ class CacheTest(PluginTestCase):
             self.assertEqual(len(calls), 1)
         finally:
             self.plugin.render.build = real
+
+    def test_track_visibility_is_part_of_the_cache_key(self):
+        self.hover(0)
+        cached = len(self.plugin._cache)
+        stub.SETTINGS.set('show_track', False)
+        self.hover(0)
+        self.assertEqual(len(self.plugin._cache), cached + 1)
 
     def test_changing_settings_clears_the_cache_and_rescans(self):
         self.hover(1)

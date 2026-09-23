@@ -8,6 +8,8 @@ A Sublime Text port of the [VisuBezier VS Code extension](https://github.com/chr
 
 Easing functions are underlined in the buffer. Hover one to see a plot of the curve alongside an animation comparing it against a reference easing (`linear` by default).
 
+Prefer just the graph? Set `"show_track": false` for a preview of the curve on its own.
+
 ![Hover to preview](https://raw.githubusercontent.com/mrcgrtz/visubezier/master/preview.gif)
 
 Supported easings:
@@ -51,6 +53,7 @@ Open them from **Preferences → Package Settings → VisuBezier → Settings**.
 | `background` | `"#2d2d30"` | Background colour of the preview image. |
 | `foreground` | `"#d7d7d7"` | Colour of the curve, grid and animated squares. |
 | `animate` | `true` | When `false`, render a static strobe of the motion instead of playing it. |
+| `show_track` | `true` | When `false`, drop the animation track and preview the curve alone. |
 | `underline` | `true` | Underline easing functions in the buffer. |
 | `underline_scope` | `"region.bluish"` | Colour scheme scope used for that underline. |
 | `selectors` | see below | Scopes in which previews are active. |
@@ -112,7 +115,7 @@ All of it is pure Python with no third-party dependencies.
 ## Known issues
 
 -   Easing functions containing anything other than numbers are ignored, including `calc()` and `var()`.
--   Rendering an animated preview takes roughly 60 ms the first time; results are cached per easing and settings combination. Set `"animate": false` for instant static previews.
+-   Rendering an animated preview takes roughly 60 ms the first time; results are cached per easing and settings combination. Set `"animate": false` for instant static previews, or `"show_track": false` to skip the animation altogether.
 -   Animation runs on a timer driven by the plugin, because minihtml supports neither CSS animation nor animated GIFs. It stops as soon as the popup closes.
 
 ## Tests
