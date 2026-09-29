@@ -14,10 +14,10 @@ Prefer just the graph? Set `"show_track": false` for a preview of the curve on i
 
 Supported easings:
 
--   Keywords — `linear`, `ease`, `ease-in`, `ease-out`, `ease-in-out`, `step-start`, `step-end`
--   `cubic-bezier()`, including curves that overshoot
--   `steps()` with every jumpterm — `start`, `end`, `jump-start`, `jump-end`, `jump-both`, `jump-none`
--   `linear()`, with explicit, implicit and doubled stop positions
+- Keywords — `linear`, `ease`, `ease-in`, `ease-out`, `ease-in-out`, `step-start`, `step-end`
+- `cubic-bezier()`, including curves that overshoot
+- `steps()` with every jumpterm — `start`, `end`, `jump-start`, `jump-end`, `jump-both`, `jump-none`
+- `linear()`, with explicit, implicit and doubled stop positions
 
 ## Requirements
 
@@ -46,18 +46,18 @@ Changes to files under `core/` are picked up on the next reload of `visubezier.p
 
 Open them from **Preferences → Package Settings → VisuBezier → Settings**.
 
-| Setting | Default | Description |
-| --- | --- | --- |
-| `reference_easing_function` | `"linear"` | Easing animated alongside yours for comparison. Any easing VisuBezier can parse. |
-| `duration` | `"1s"` | Duration of one pass of the animation, as a CSS time. |
-| `background` | `"#2d2d30"` | Background colour of the preview image. |
-| `foreground` | `"#d7d7d7"` | Colour of the curve, grid and animated squares. |
-| `animate` | `true` | When `false`, render a static strobe of the motion instead of playing it. |
-| `show_track` | `true` | When `false`, drop the animation track and preview the curve alone. |
-| `underline` | `true` | Underline easing functions in the buffer. |
-| `underline_scope` | `"region.bluish"` | Colour scheme scope used for that underline. |
-| `selectors` | see below | Scopes in which previews are active. |
-| `max_file_size` | `1048576` | Skip scanning buffers larger than this many bytes. |
+| Setting                     | Default           | Description                                                                      |
+| --------------------------- | ----------------- | -------------------------------------------------------------------------------- |
+| `reference_easing_function` | `"linear"`        | Easing animated alongside yours for comparison. Any easing VisuBezier can parse. |
+| `duration`                  | `"1s"`            | Duration of one pass of the animation, as a CSS time.                            |
+| `background`                | `"#2d2d30"`       | Background colour of the preview image.                                          |
+| `foreground`                | `"#d7d7d7"`       | Colour of the curve, grid and animated squares.                                  |
+| `animate`                   | `true`            | When `false`, render a static strobe of the motion instead of playing it.        |
+| `show_track`                | `true`            | When `false`, drop the animation track and preview the curve alone.              |
+| `underline`                 | `true`            | Underline easing functions in the buffer.                                        |
+| `underline_scope`           | `"region.bluish"` | Colour scheme scope used for that underline.                                     |
+| `selectors`                 | see below         | Scopes in which previews are active.                                             |
+| `max_file_size`             | `1048576`         | Skip scanning buffers larger than this many bytes.                               |
 
 `selectors` defaults to:
 
@@ -95,9 +95,9 @@ button {
 
 Sublime Text's popup renderer, [minihtml](https://www.sublimetext.com/docs/minihtml.html), supports neither SVG nor CSS animation, which is how the VS Code extension drew its preview. So VisuBezier rasterises the preview itself:
 
--   `core/easing.py` parses and **evaluates** each easing — a Newton-Raphson solver for `cubic-bezier()`, jumpterm arithmetic for `steps()`, piecewise interpolation for `linear()`.
--   `core/raster.py` draws into an indexed-colour canvas whose palette is a single foreground-over-background ramp, giving anti-aliasing for free.
--   `core/png.py` encodes that canvas.
+- `core/easing.py` parses and **evaluates** each easing — a Newton-Raphson solver for `cubic-bezier()`, jumpterm arithmetic for `steps()`, piecewise interpolation for `linear()`.
+- `core/raster.py` draws into an indexed-colour canvas whose palette is a single foreground-over-background ramp, giving anti-aliasing for free.
+- `core/png.py` encodes that canvas.
 
 minihtml also paints only the first frame of an animated GIF, so animation cannot be delegated to the image format either. An animated preview is instead a sequence of stills that the plugin cycles through with `update_popup` while the popup is open. `core/gif.py` survives for one job — generating the animated `preview.gif` above, via `tools/make_preview.py`.
 
@@ -105,18 +105,18 @@ All of it is pure Python with no third-party dependencies.
 
 ## Differences from the VS Code extension
 
--   **`linear()` animates.** VS Code's renderer had no `linear()` support, so the extension could draw the graph but fell back to `ease` for the animation. Evaluating the easing directly removes that limitation.
--   **Overshoot stays in frame.** Squares are clamped to the animation track rather than escaping the preview area.
--   **Adjacent easings are both found.** The upstream pattern consumed the delimiter after a match, so the second of `ease,ease` was missed.
--   **`linear()` stop positions follow the spec.** They are forced to be non-decreasing, and a final stop keeps its own value rather than being snapped to `1`.
--   **Settings use Sublime naming and scope selectors** instead of VS Code language identifiers. See the changelog for the mapping.
--   **No inline icon.** minihtml cannot place an image inside a line of text, so matches are marked with an underline only.
+- **`linear()` animates.** VS Code's renderer had no `linear()` support, so the extension could draw the graph but fell back to `ease` for the animation. Evaluating the easing directly removes that limitation.
+- **Overshoot stays in frame.** Squares are clamped to the animation track rather than escaping the preview area.
+- **Adjacent easings are both found.** The upstream pattern consumed the delimiter after a match, so the second of `ease,ease` was missed.
+- **`linear()` stop positions follow the spec.** They are forced to be non-decreasing, and a final stop keeps its own value rather than being snapped to `1`.
+- **Settings use Sublime naming and scope selectors** instead of VS Code language identifiers. See the changelog for the mapping.
+- **No inline icon.** minihtml cannot place an image inside a line of text, so matches are marked with an underline only.
 
 ## Known issues
 
--   Easing functions containing anything other than numbers are ignored, including `calc()` and `var()`.
--   Rendering an animated preview takes roughly 60 ms the first time; results are cached per easing and settings combination. Set `"animate": false` for instant static previews, or `"show_track": false` to skip the animation altogether.
--   Animation runs on a timer driven by the plugin, because minihtml supports neither CSS animation nor animated GIFs. It stops as soon as the popup closes.
+- Easing functions containing anything other than numbers are ignored, including `calc()` and `var()`.
+- Rendering an animated preview takes roughly 60 ms the first time; results are cached per easing and settings combination. Set `"animate": false` for instant static previews, or `"show_track": false` to skip the animation altogether.
+- Animation runs on a timer driven by the plugin, because minihtml supports neither CSS animation nor animated GIFs. It stops as soon as the popup closes.
 
 ## Tests
 
